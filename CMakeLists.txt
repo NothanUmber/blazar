@@ -13,13 +13,17 @@ add_test(NAME DynamicsCheck COMMAND DynamicsCheck)
 if(QUASAR_DSP_ONLY)
  return()
 endif()
-set(JUCE_LOCAL_SOURCE "" CACHE PATH "Path to JUCE 8.0.12 source (required)")
+set(JUCE_LOCAL_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/JUCE" CACHE PATH "Path to JUCE 8.0.12 source")
 if(NOT EXISTS "${JUCE_LOCAL_SOURCE}/modules/juce_core/juce_core.h")
- message(FATAL_ERROR "Set JUCE_LOCAL_SOURCE to a JUCE 8.0.12 checkout. See README.md.")
+ message(FATAL_ERROR "Initialize the JUCE submodule with git submodule update --init --recursive, or set JUCE_LOCAL_SOURCE to a JUCE 8.0.12 checkout. See README.md.")
 endif()
 add_subdirectory("${JUCE_LOCAL_SOURCE}" "${CMAKE_BINARY_DIR}/juce-local" EXCLUDE_FROM_ALL)
+set(BLAZAR_PLUGIN_FORMATS VST3)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+ list(APPEND BLAZAR_PLUGIN_FORMATS AU)
+endif()
 juce_add_plugin(Blazar COMPANY_NAME "Dog Lab Plugins" BUNDLE_ID "local.doglab.blazar"
- PLUGIN_MANUFACTURER_CODE Dglb PLUGIN_CODE Blzr FORMATS VST3 PRODUCT_NAME "Blazar"
+ PLUGIN_MANUFACTURER_CODE Dglb PLUGIN_CODE Blzr FORMATS ${BLAZAR_PLUGIN_FORMATS} PRODUCT_NAME "Blazar"
  IS_SYNTH TRUE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE IS_MIDI_EFFECT FALSE
  COPY_PLUGIN_AFTER_BUILD FALSE VST3_CATEGORIES Instrument Synth)
 target_sources(Blazar PRIVATE Source/Processor.cpp Source/Processor.h Source/BlazarEditor.h Source/Engine.h Source/MatterModels.h Source/WorldModels.h Source/Dynamics.h Source/Parameters.h Source/Limits.h)
@@ -27,6 +31,22 @@ target_compile_definitions(Blazar PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE
 target_link_libraries(Blazar PRIVATE juce::juce_audio_utils PUBLIC juce::juce_recommended_config_flags)
 juce_add_binary_data(BlazarArtwork SOURCES Assets/BlazarAccretion.png)
 target_link_libraries(Blazar PRIVATE BlazarArtwork)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+ option(BLAZAR_ADHOC_SIGN "Ad-hoc sign macOS plugin bundles for local use" ON)
+ if(BLAZAR_ADHOC_SIGN)
+  find_program(BLAZAR_CODESIGN codesign REQUIRED)
+  # With COPY_PLUGIN_AFTER_BUILD disabled, JUCE does not sign the AU bundle,
+  # and its VST3 manifest is written after signing. Seal both finished bundles.
+  foreach(format IN LISTS BLAZAR_PLUGIN_FORMATS)
+   add_custom_command(TARGET Blazar_${format} POST_BUILD
+    COMMAND "${BLAZAR_CODESIGN}" --force --sign - "$<TARGET_BUNDLE_DIR:Blazar_${format}>"
+    COMMENT "Ad-hoc signing Blazar ${format}"
+    VERBATIM)
+  endforeach()
+ endif()
+endif()
+
 juce_add_console_app(EditorCheck PRODUCT_NAME "Blazar Editor Check")
 target_sources(EditorCheck PRIVATE Tests/BlazarEditorCheck.cpp Source/Processor.cpp)
 target_compile_definitions(EditorCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
@@ -35,6 +55,7 @@ juce_add_console_app(PluginCheck PRODUCT_NAME "Blazar Check")
 target_sources(PluginCheck PRIVATE Tests/BlazarPluginCheck.cpp)
 target_compile_definitions(PluginCheck PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(PluginCheck PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
+add_dependencies(PluginCheck Blazar_VST3)
 add_test(NAME PluginCheck COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --validate)
 add_test(NAME Plasma12Check COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --plasma12-smoke)
 add_test(NAME PulseCheck COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --pulse-balance-smoke)
