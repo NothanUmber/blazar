@@ -149,7 +149,8 @@ class Engine {
  std::array<Voice,Limits::voices> voices;
  struct Retired {Mode l,r;double particle=0,fade=0;int channel=0;};std::array<Retired,Limits::voices> retired;
  std::array<Channel,16> channels{};
- Settings settings,targetSettings;bool fresh=true;int controlClock=0;Space space;Sine sine;Random rng;double sr=48000,bpm=120,motionPhase=0,beat=0,pulsePhase=0,drift=0,driftVelocity=0,evolutionRate=.12,target=0,next=0;
+ // Only the low bits are used for scheduling; unsigned wrap is intentional.
+ Settings settings,targetSettings;bool fresh=true;uint32_t controlClock=0;Space space;Sine sine;Random rng;double sr=48000,bpm=120,motionPhase=0,beat=0,pulsePhase=0,drift=0,driftVelocity=0,evolutionRate=.12,target=0,next=0;
  double previousL=0,previousR=0,dcL=0,dcR=0,preSafety=0;uint32_t serial=1;size_t retirement=0;
 public:
  void prepare(double rate){sr=rate;space.prepare(rate);reset();}
