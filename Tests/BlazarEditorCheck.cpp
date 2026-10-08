@@ -119,6 +119,32 @@ int main(int argc,char** argv){try{
   verify();
  }
  std::cout<<"PASS 40 GUI/host programs refresh every attachment"<<std::endl;
+ // Reproduce the selector state after a user patch load without touching the
+ // user's real patch library. User patches do not change the factory index.
+ p.setCurrentProgram(0);
+ auto* banks=dynamic_cast<juce::ComboBox*>(find(*editor,"patchBank"));
+ require(banks&&pumpUntil([&]{return banks->getSelectedId()==1&&programs->getSelectedId()==1;}),"factory setup for recall checks");
+ auto selectUserPatch=[&]{
+  banks->addItem("Review Test Bank",9001);banks->setSelectedId(9001,juce::dontSendNotification);
+  programs->clear(juce::dontSendNotification);programs->addItem("Review User Patch",1);programs->setSelectedId(1,juce::dontSendNotification);
+  p.parameters().getParameter("matter")->setValueNotifyingHost(.123f);
+ };
+ selectUserPatch();p.setCurrentProgram(0);
+ require(pumpUntil([&]{return banks->getSelectedId()==1&&programs->getText()==p.getProgramName(0);}),"same-index host recall must clear user patch selection");
+ verify();
+ juce::MemoryBlock recalledState;p.getStateInformation(recalledState);
+ selectUserPatch();p.setStateInformation(recalledState.getData(),int(recalledState.getSize()));
+ require(pumpUntil([&]{return banks->getSelectedId()==1&&programs->getText()==p.getProgramName(0);}),"same-index state restore must clear user patch selection");
+ selectUserPatch();p.setCurrentProgram(0);
+ auto* saveButton=dynamic_cast<juce::TextButton*>(find(*editor,"savePatch"));require(saveButton,"Save button exists");
+ saveButton->onClick(); // Deliberately do not dispatch the refresh timer first.
+ require(banks->getSelectedId()==1,"Save used stale user patch selection after host recall");
+ auto* modals=juce::ModalComponentManager::getInstance();
+ require(modals->getNumModalComponents()>0,"Factory Save should ask for a new patch name");
+ modals->cancelAllModalComponents();
+ require(pumpUntil([&]{return modals->getNumModalComponents()==0;}),"close test Save dialog");
+ verify();
+ std::cout<<"PASS same-index recall/state refresh and immediate Save protection"<<std::endl;
  auto* forceSlider=dynamic_cast<juce::Slider*>(find(*editor,"param:force"));
  {AutomationObserver observer(*p.parameters().getParameter("force"));auto point=forceSlider->getLocalBounds().getCentre().toFloat();auto now=juce::Time::getCurrentTime();
   auto mouse=[&](juce::ModifierKeys mods){return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(),point,mods,1,0,0,0,0,forceSlider,forceSlider,now,point,now,1,false);};

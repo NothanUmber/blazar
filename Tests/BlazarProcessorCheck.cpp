@@ -39,10 +39,12 @@ void checkStateValidation(Processor& processor) {
     processor.setCurrentProgram(28);
     const auto original = savedState(processor);
     const auto expected = parameterValues(processor);
+    const auto revision = processor.getProgramRevision();
     auto reject = [&](const juce::ValueTree& tree) {
         restore(processor, tree);
         require(parameterValues(processor) == expected, "Invalid state changed parameters");
         require(processor.getCurrentProgram() == 28, "Invalid state changed factory program");
+        require(processor.getProgramRevision() == revision, "Invalid state announced a recall");
     };
 
     for (auto* parameter : processor.getParameters()) {
@@ -99,7 +101,13 @@ void checkStateValidation(Processor& processor) {
     restore(processor, compatible);
     require(std::abs(processor.parameters().getRawParameterValue("pulseRate")->load() - 1.25f) < 1e-5f, "Older state with missing parameter");
 
-    std::cout << "PASS state validation, atomic rejection, endpoints and legacy rates\n";
+    const auto beforeRecall = processor.getProgramRevision();
+    processor.setCurrentProgram(processor.getCurrentProgram());
+    require(processor.getProgramRevision() != beforeRecall, "Same-index recall must announce a change");
+    const auto beforeRestore = processor.getProgramRevision();
+    restore(processor, savedState(processor));
+    require(processor.getProgramRevision() != beforeRestore, "State restore must announce a change");
+    std::cout << "PASS state validation, atomic rejection, endpoints, legacy rates and recall revisions\n";
 }
 
 }
