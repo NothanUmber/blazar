@@ -59,4 +59,7 @@ add_dependencies(PluginCheck Blazar_VST3)
 add_test(NAME PluginCheck COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --validate)
 add_test(NAME Plasma12Check COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --plasma12-smoke)
 add_test(NAME PulseCheck COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --pulse-balance-smoke)
-
+add_test(NAME PluginEditorCheck COMMAND PluginCheck "${CMAKE_BINARY_DIR}/Blazar_artefacts/$<CONFIG>/VST3/Blazar.vst3" --gui)
+add_test(NAME UserPatchCheck COMMAND EditorCheck --patch-smoke "${CMAKE_BINARY_DIR}/user-patch-test")
+add_test(NAME EditorCheck COMMAND EditorCheck "${CMAKE_BINARY_DIR}/BLAZAR-GUI.png")
+set_tests_properties(PluginEditorCheck UserPatchCheck EditorCheck PROPERTIES LABELS "gui" RUN_SERIAL TRUE)

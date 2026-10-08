@@ -1,0 +1,67 @@
+name: Build and validate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build universal plugins and run tests
+        run: ./build-macos.sh
+      - name: Check both architectures and bundle signatures
+        run: |
+          for bundle in build-macos/Blazar_artefacts/Release/VST3/Blazar.vst3 build-macos/Blazar_artefacts/Release/AU/Blazar.component; do
+            lipo "$bundle/Contents/MacOS/Blazar" -verify_arch arm64
+            lipo "$bundle/Contents/MacOS/Blazar" -verify_arch x86_64
+            codesign --verify --strict "$bundle"
+          done
+      - name: Install and validate Audio Unit
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto build-macos/Blazar_artefacts/Release/AU/Blazar.component \
+            "$HOME/Library/Audio/Plug-Ins/Components/Blazar.component"
+          # Refresh discovery of this newly installed component on the CI runner.
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumu Blzr Dglb -strict
+      - name: Upload test logs and editor snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ matrix.runner }}
+          path: |
+            build-macos/Testing/Temporary/*.log
+            build-macos/BLAZAR-*.png
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build VST3 and run tests
+        shell: pwsh
+        run: ./build.ps1 -JucePath "$PWD/dependencies/JUCE"
+      - name: Upload test logs and editor snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-windows
+          path: |
+            build-release/Testing/Temporary/*.log
+            build-release/BLAZAR-*.png
