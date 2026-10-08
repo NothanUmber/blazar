@@ -46,8 +46,8 @@ class Processor final:public juce::AudioProcessor{
   int ch=std::clamp(m.getChannel()-1,0,15);
   if(m.isNoteOn())engine.noteOn(m.getNoteNumber(),ch,m.getFloatVelocity());
   else if(m.isNoteOff())engine.noteOff(m.getNoteNumber(),ch);
-  else if(m.isAllSoundOff())engine.reset();
-  else if(m.isAllNotesOff())engine.releaseAll();
+  else if(m.isAllSoundOff())engine.silenceChannel(ch);
+  else if(m.isAllNotesOff())engine.releaseChannel(ch);
   else if(m.isPitchWheel()){engine.bend(ch,(m.getPitchWheelValue()-8192)/8192.);if(ch==0)pitchUi=m.getPitchWheelValue();}
   else if(m.isChannelPressure())engine.pressure(ch,m.getChannelPressureValue()/127.);
   else if(m.isController()){
