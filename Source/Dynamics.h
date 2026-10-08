@@ -187,7 +187,8 @@ class Voice {
  double lastMatter=0,lastVelocity=0,lastDisplacement=0,step=.02,admittance=.02,storedEnergy=0;
  double strikeAge=0,strikeDuration=.002,scrapeAge=0,scrapeForce=0,forceState=0;
  double exciterMix=1,modelGain=1,fieldGain=1,plasmaGain=1;
- int currentExciter=0,oldExciter=0,currentMatter=-1,currentField=-1,currentPlasma=-1,counter=0;
+ int currentExciter=0,oldExciter=0,currentMatter=-1,currentField=-1,currentPlasma=-1;
+ uint32_t counter=0; // Control-rate scheduling must wrap safely in long-held notes.
  Frame lastFrame{},previousFrame{};
  uint64_t releaseFrames=0;bool initialised=false,ringActive=false;
  std::array<double,8> initialPhases{};
