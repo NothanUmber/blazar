@@ -14,6 +14,7 @@
 !/RELEASE_NOTES.md
 !/build.ps1
 !/build-macos.sh
+!/.github/
 !/Source/
 !/Assets/
 !/Tests/

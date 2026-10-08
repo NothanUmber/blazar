@@ -122,7 +122,7 @@ ditto build-macos/Blazar_artefacts/Release/AU/Blazar.component \
 
 Restart your host and rescan plugins. Use the Audio Unit in Logic Pro or GarageBand, or the VST3 in a compatible host. BLAZAR is an instrument plugin; no standalone application is built. The build ad-hoc signs both bundles for local use; it does not create Developer ID signed or notarized release packages. Distributors with their own signing pipeline can disable this step with `-DBLAZAR_ADHOC_SIGN=OFF`.
 
-CTest exercises the DSP, the built VST3, state recall and MIDI. After installing the Audio Unit, validate its host interface with Apple's tool:
+CTest exercises the DSP, the built VST3, state recall, MIDI, user patches and editor controls/lifecycle. GUI tests need a logged-in graphical session; use `ctest --test-dir build-macos -C Release --output-on-failure -LE gui` in a headless environment. After installing the Audio Unit, validate its host interface with Apple's tool:
 
 ```sh
 auval -v aumu Blzr Dglb -strict
