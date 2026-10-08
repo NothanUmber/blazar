@@ -47,11 +47,14 @@ public:
  }
 };
 class Knob final:public juce::Component {
- juce::Label label;
- bool headerVolume=false;
- std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 public:
  juce::Slider slider;
+private:
+ juce::Label label;
+ bool headerVolume=false;
+ // Members are destroyed in reverse order: detach while the slider still exists.
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+public:
  Knob(juce::AudioProcessorValueTreeState& state,const juce::String& id,const juce::String& caption,juce::Colour c){
   headerVolume=id=="volume";setComponentID("control:"+id);slider.setComponentID("param:"+id);label.setText(caption,juce::dontSendNotification);label.setJustificationType(juce::Justification::centred);label.setFont(font(17));label.setColour(juce::Label::textColourId,ink());
   slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);slider.setRotaryParameters(juce::MathConstants<float>::pi*1.2f,juce::MathConstants<float>::pi*2.8f,true);
@@ -66,9 +69,13 @@ public:
  void resized()override{auto r=getLocalBounds();if(headerVolume){label.setBounds(r.removeFromLeft(75).withHeight(65));slider.setBounds(r);}else{label.setBounds(r.removeFromTop(28));slider.setBounds(r);}}
 };
 class Selector final:public juce::Component {
- juce::Label label;std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
 public:
  juce::ComboBox box;
+private:
+ juce::Label label;
+ // The attachment removes a listener from box during destruction.
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
+public:
  Selector(juce::AudioProcessorValueTreeState& state,const juce::String& id,const juce::String& caption,juce::Colour c){
   setComponentID("control:"+id);box.setComponentID("param:"+id);label.setText(caption,juce::dontSendNotification);label.setFont(font(18));label.setColour(juce::Label::textColourId,ink());
   auto* p=dynamic_cast<juce::AudioParameterChoice*>(state.getParameter(id));jassert(p);box.addItemList(p->choices,1);box.setColour(juce::ComboBox::outlineColourId,c.withAlpha(.5f));box.setTooltip(caption);
