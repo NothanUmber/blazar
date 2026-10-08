@@ -10,6 +10,8 @@ class Processor final:public juce::AudioProcessor{
  juce::AudioProcessorValueTreeState state;
  std::array<std::atomic<float>*,quasar::parameterCount> values{};
  std::atomic<int> program{0};juce::MidiKeyboardState keyboard;
+ // A recall is significant even when the factory program number stays the same.
+ std::atomic<uint32_t> programRevision{0};
  std::atomic<float>* volumeValue=nullptr;
  juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> volumeGain;
  std::array<std::atomic<float>,2> meterPeak{},meterRms{};
@@ -64,12 +66,16 @@ public:
  bool acceptsMidi()const override{return true;}bool producesMidi()const override{return false;}bool isMidiEffect()const override{return false;}
  double getTailLengthSeconds()const override{return 60;}
  int getNumPrograms()override{return quasar::programCount;}int getCurrentProgram()override{return program.load();}
+ uint32_t getProgramRevision()const{return programRevision.load();}
  const juce::String getProgramName(int i)override{return quasar::patchName(i);}
  void changeProgramName(int,const juce::String&)override{}
  void setCurrentProgram(int i)override{
-  program=std::clamp(i,0,quasar::programCount-1);auto p=quasar::patch(program);
+  const int selectedProgram=std::clamp(i,0,quasar::programCount-1);
+  auto p=quasar::patch(selectedProgram);
   for(auto& item:quasar::floatParameters){auto* a=state.getParameter(item.id);a->setValueNotifyingHost(a->convertTo0to1(float(p.*item.member)));}
   for(auto& item:quasar::choiceParameters)state.getParameter(item.id)->setValueNotifyingHost(float(p.*item.member)/(item.count-1));
+  program=selectedProgram;
+  ++programRevision;
  }
  bool isBusesLayoutSupported(const BusesLayout& b)const override{return b.getMainInputChannelSet().isDisabled()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
  void prepareToPlay(double sr,int)override{engine.prepare(sr);keyboard.reset();volumeGain.reset(sr,.02);volumeGain.setCurrentAndTargetValue(gainForDb(volumeValue->load()));clearIndicators();}
@@ -107,6 +113,7 @@ public:
  void initialise(){auto p=quasar::Settings{};p.pulseRate=1;
   for(auto& item:quasar::floatParameters){auto* a=state.getParameter(item.id);a->setValueNotifyingHost(a->convertTo0to1(float(p.*item.member)));}
   for(auto& item:quasar::choiceParameters)state.getParameter(item.id)->setValueNotifyingHost(float(p.*item.member)/(item.count-1));program=0;
+  ++programRevision;
  }
  static float gainForDb(float db){return db<=-60.f?0.f:juce::Decibels::decibelsToGain(db);}
  void clearIndicators(){voiceCount=0;for(auto& x:meterPeak)x=0;for(auto& x:meterRms)x=0;pitchUi=8192;modUi=0;pendingPitch=-1;pendingMod=-1;}
@@ -147,5 +154,6 @@ public:
   tree.setProperty("pulseRateContinuous",true,nullptr);
   state.replaceState(tree);
   program=int(std::clamp(restoredProgram,0.,double(quasar::programCount-1)));
+  ++programRevision;
  }
 };

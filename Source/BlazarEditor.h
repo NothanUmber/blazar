@@ -121,9 +121,17 @@ class Canvas final:public juce::Component,private juce::Timer {
  Knob rate;
  juce::MidiKeyboardComponent keys;
  juce::Slider pitch,mod;juce::TextButton octaveDown{"<"},octaveUp{">"};juce::Label octaveLabel,voicesLabel;
- juce::TooltipWindow tips{this,650};int selected=0,octave=0,lastProgram=-1;
+ juce::TooltipWindow tips{this,650};int selected=0,octave=0;
+ uint32_t lastProgramRevision=0;
+ void refreshRecalledProgram(){
+  const auto revision=processor.getProgramRevision();
+  if(revision==lastProgramRevision)return;
+  lastProgramRevision=revision;
+  if(bank.getSelectedId()!=1){refreshBanks();refreshPrograms();}
+  else program.setSelectedId(processor.getCurrentProgram()+1,juce::dontSendNotification);
+ }
  void timerCallback()override{
-  int current=processor.getCurrentProgram();if(current!=lastProgram){lastProgram=current;if(bank.getSelectedId()!=1){refreshBanks();bank.setSelectedId(1,juce::dontSendNotification);refreshPrograms();}program.setSelectedId(current+1,juce::dontSendNotification);}
+  refreshRecalledProgram();
   if(!pitch.isMouseButtonDown())pitch.setValue((processor.pitchValue()-8192)/8192.,juce::dontSendNotification);
   if(!mod.isMouseButtonDown())mod.setValue(processor.modValue()/127.,juce::dontSendNotification);
   auto v=juce::String(processor.voices())+" / 8 VOICES";if(voicesLabel.getText()!=v)voicesLabel.setText(v,juce::dontSendNotification);
@@ -138,7 +146,13 @@ class Canvas final:public juce::Component,private juce::Timer {
   deleteBank.setEnabled(!factory);
   program.setTextWhenNothingSelected(factory?"Factory":"Select a user patch");deletePatch.setEnabled(!factory&&program.getSelectedId()>0);
  }
- void chooseProgram(){if(program.getSelectedId()<=0)return;if(bank.getSelectedId()==1){processor.setCurrentProgram(program.getSelectedId()-1);lastProgram=processor.getCurrentProgram();}else error(userPatches.load(selectedBank(),program.getText()));deletePatch.setEnabled(bank.getSelectedId()!=1&&program.getSelectedId()>0);}
+ void chooseProgram(){
+  if(program.getSelectedId()<=0)return;
+  if(bank.getSelectedId()==1)processor.setCurrentProgram(program.getSelectedId()-1);
+  else error(userPatches.load(selectedBank(),program.getText()));
+  lastProgramRevision=processor.getProgramRevision();
+  deletePatch.setEnabled(bank.getSelectedId()!=1&&program.getSelectedId()>0);
+ }
  void nameDialog(bool bankOnly){
   auto* dialog=new juce::AlertWindow(bankOnly?"New user bank":"Save patch as","Names are yours. Factory patches are never overwritten.",juce::MessageBoxIconType::NoIcon);
   dialog->addTextEditor("bank",selectedBank(),"Bank name:");if(!bankOnly)dialog->addTextEditor("patch",bank.getSelectedId()==1?"":program.getText(),"Patch name:");
@@ -172,15 +186,22 @@ public:
   program.onChange=[this]{chooseProgram();};program.setBounds(738,23,292,32);addAndMakeVisible(program);
   previous.setComponentID("previousProgram");next.setComponentID("nextProgram");initial.setComponentID("init");
   auto step=[this](int d){int count=program.getNumItems();if(count>0)program.setSelectedId((std::max(0,program.getSelectedId()-1)+d+count)%count+1,juce::sendNotificationSync);};
-  previous.onClick=[step]{step(-1);};next.onClick=[step]{step(1);};initial.onClick=[this]{processor.initialise();refreshBanks();refreshPrograms();lastProgram=processor.getCurrentProgram();};
+  previous.onClick=[step]{step(-1);};next.onClick=[step]{step(1);};initial.onClick=[this]{processor.initialise();refreshRecalledProgram();};
   previous.setBounds(696,23,34,32);next.setBounds(1038,23,34,32);initial.setBounds(1050,63,50,32);
   for(auto* b:{&previous,&next,&initial}){b->setColour(juce::TextButton::buttonColourId,colour(1));addAndMakeVisible(b);}
   bank.setComponentID("patchBank");bank.setBounds(491,23,197,32);bank.setTooltip("Factory or a named user bank");addAndMakeVisible(bank);refreshBanks();bank.onChange=[this]{refreshPrograms();};
   savePatch.setBounds(491,63,85,32);saveAsPatch.setBounds(584,63,100,32);deletePatch.setBounds(692,63,85,32);newBank.setBounds(785,63,120,32);deleteBank.setBounds(913,63,129,32);
   for(auto* b:{&savePatch,&saveAsPatch,&deletePatch,&newBank,&deleteBank}){b->setColour(juce::TextButton::buttonColourId,colour(1));addAndMakeVisible(b);}
-  savePatch.onClick=[this]{if(bank.getSelectedId()==1||program.getSelectedId()==0){nameDialog(false);return;}error(userPatches.save(selectedBank(),program.getText(),true));};
+  savePatch.setComponentID("savePatch");
+  savePatch.onClick=[this]{
+   // A host recall may have arrived since the last timer callback. Never save
+   // its parameters over the user patch that was selected before that recall.
+   refreshRecalledProgram();
+   if(bank.getSelectedId()==1||program.getSelectedId()==0){nameDialog(false);return;}
+   error(userPatches.save(selectedBank(),program.getText(),true));
+  };
   saveAsPatch.onClick=[this]{nameDialog(false);};newBank.onClick=[this]{nameDialog(true);};deletePatch.onClick=[this]{confirmDelete();};deleteBank.setComponentID("deleteBank");deleteBank.onClick=[this]{confirmDeleteBank();};deleteBank.setEnabled(false);
-  deletePatch.setEnabled(false);lastProgram=processor.getCurrentProgram();
+  deletePatch.setEnabled(false);lastProgramRevision=processor.getProgramRevision();
   const char* ids[]={"matter","field","particles","plasma","coupling","energy","motion","evolve","space","pulse"};
   const char* labels[]={"MATTER","FIELD","PARTICLES","PLASMA","TENSEGRITY","ENERGY","MOTION","EVOLVE","SPACE","PULSE"};
   for(int i=0;i<10;++i){auto k=std::make_unique<Knob>(p.parameters(),ids[i],labels[i],i<5?colour(i):i==5?colour(0):i==7?colour(2):ink());
