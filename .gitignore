@@ -13,6 +13,7 @@
 !/PROVENANCE.md
 !/RELEASE_NOTES.md
 !/build.ps1
+!/build-macos.sh
 !/Source/
 !/Assets/
 !/Tests/

@@ -44,7 +44,7 @@ struct Host {
 
 int main(int argc,char** argv){try{
  juce::ScopedJuceInitialiser_GUI init;check(argc==2||argc==3,"bundle path");Host h(argv[1]);std::string mode=argc==3?argv[2]:"all";
- std::cout<<"DISCOVERED "<<h.types[0]->name<<" instrument x64 stereo, parameters "<<h.plugin->getParameters().size()<<", 40 programs"<<std::endl;
+ std::cout<<"DISCOVERED "<<h.types[0]->name<<" instrument stereo, parameters "<<h.plugin->getParameters().size()<<", 40 programs"<<std::endl;
  if(mode=="--pulse-balance-smoke"){
   auto* rate=h.parameter("PULSE RATE");check(rate->getNumSteps()>1000,"genuinely continuous rate parameter");
   for(float rateValue:{.25f,1.137f,4.f})for(float depth:{0.f,.4f,1.f}){

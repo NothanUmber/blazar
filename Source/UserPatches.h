@@ -5,7 +5,15 @@ class UserPatches {
  Processor& processor;
 public:
  juce::File root;
- explicit UserPatches(Processor& p,juce::File location=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Dog Lab Plugins/Blazar/User Patches")):processor(p),root(location){}
+ static juce::File defaultDirectory(){
+  auto directory=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+ #if JUCE_MAC
+  // JUCE returns ~/Library on macOS; application files belong in Application Support.
+  directory=directory.getChildFile("Application Support");
+ #endif
+  return directory.getChildFile("Dog Lab Plugins/Blazar/User Patches");
+ }
+ explicit UserPatches(Processor& p,juce::File location=defaultDirectory()):processor(p),root(location){}
  static bool validName(const juce::String& name){
   if(name.isEmpty()||name.length()>80||name!=name.trim()||name.endsWithChar('.')||name.containsAnyOf("/\\:*?\"<>|")||name.containsChar(0))return false;
   for(auto c:name)if(c<32)return false;
