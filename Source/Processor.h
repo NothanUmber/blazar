@@ -2,6 +2,9 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "Engine.h"
 #include "Parameters.h"
+#include <limits>
+#include <locale>
+#include <sstream>
 class Processor final:public juce::AudioProcessor{
  quasar::Engine engine;
  juce::AudioProcessorValueTreeState state;
@@ -28,6 +31,14 @@ class Processor final:public juce::AudioProcessor{
   }
   l.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"volume",5},"MASTER VOLUME",juce::NormalisableRange<float>{-60.f,0.f},0.f));
   return l;
+ }
+ static bool readFiniteNumber(const juce::var& property,double& value){
+  // XML stores numeric properties as strings. Require the entire string to be
+  // a finite number, rather than accepting a numeric prefix or NaN/Infinity.
+  std::istringstream input(property.toString().trim().toStdString());
+  input.imbue(std::locale::classic());
+  input>>value;
+  return !input.fail()&&input.eof()&&std::isfinite(value);
  }
  void handle(const juce::MidiMessage& m){
   int ch=std::clamp(m.getChannel()-1,0,15);
@@ -103,7 +114,38 @@ public:
  void getStateInformation(juce::MemoryBlock& b)override{auto copy=state.copyState();copy.setProperty("factoryProgram",program.load(),nullptr);copy.setProperty("pulseRateContinuous",true,nullptr);copyXmlToBinary(*copy.createXml(),b);}
  void setStateInformation(const void* data,int size)override{
   auto xml=getXmlFromBinary(data,size);
-  if(xml&&xml->hasTagName(state.state.getType())){auto tree=juce::ValueTree::fromXml(*xml);if(!bool(tree.getProperty("pulseRateContinuous",false))){static constexpr float rates[]={.25f,.5f,1.f,2.f,3.f,4.f};for(auto child:tree)if(child.getProperty("id").toString()=="pulseRate")child.setProperty("value",rates[std::clamp(int(child.getProperty("value",2)),0,5)],nullptr);tree.setProperty("pulseRateContinuous",true,nullptr);}
-   program=std::clamp(int(tree.getProperty("factoryProgram",0)),0,quasar::programCount-1);state.replaceState(tree);}
+  if(!xml||!xml->hasTagName("BlazarGui5"))return;
+  auto tree=juce::ValueTree::fromXml(*xml);
+  const bool legacyRate=!bool(tree.getProperty("pulseRateContinuous",false));
+  juce::StringArray restoredIDs;
+
+  // Validate and migrate the detached tree first. A bad parameter must not
+  // partially replace the current sound or poison the audio thread with NaNs.
+  // Missing parameters remain compatible with states from older versions.
+  for(auto child:tree){
+   const auto id=child.getProperty("id").toString();
+   auto* parameter=state.getParameter(id);
+   if(!parameter)continue;
+   if(restoredIDs.contains(id))return;
+   restoredIDs.add(id);
+   double value=parameter->convertFrom0to1(parameter->getDefaultValue());
+   if(child.hasProperty("value")&&!readFiniteNumber(child.getProperty("value"),value))return;
+   if(legacyRate&&id=="pulseRate"){
+    static constexpr float rates[]={.25f,.5f,1.f,2.f,3.f,4.f};
+    // Clamp before converting to int, including very large legacy values.
+    const int index=child.hasProperty("value")?int(std::clamp(value,0.,5.)):2;
+    value=rates[index];
+   }
+   if(value<-std::numeric_limits<float>::max()||value>std::numeric_limits<float>::max())return;
+   const float parameterValue=float(value);
+   const auto& range=parameter->getNormalisableRange();
+   if(parameterValue<range.start||parameterValue>range.end)return;
+   child.setProperty("value",parameterValue,nullptr);
+  }
+  double restoredProgram=0;
+  if(tree.hasProperty("factoryProgram")&&!readFiniteNumber(tree.getProperty("factoryProgram"),restoredProgram))return;
+  tree.setProperty("pulseRateContinuous",true,nullptr);
+  state.replaceState(tree);
+  program=int(std::clamp(restoredProgram,0.,double(quasar::programCount-1)));
  }
 };

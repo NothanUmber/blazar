@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <set>
 #include <thread>
+void runProcessorChecks(Processor&);
 void require(bool x,const char* m){if(!x)throw std::runtime_error(m);}
 juce::Component* find(juce::Component& root,const juce::String& id){if(root.getComponentID()==id)return &root;for(auto* c:root.getChildren())if(auto* result=find(*c,id))return result;return nullptr;}
 void pump(){juce::MessageManager::getInstance()->runDispatchLoopUntil(150);}
@@ -42,6 +43,9 @@ struct AutomationObserver final:juce::AudioProcessorParameter::Listener {
 };
 int main(int argc,char** argv){try{
  juce::ScopedJuceInitialiser_GUI init;Processor p;p.prepareToPlay(48000,256);
+ if(argc==2&&juce::String(argv[1])=="--processor-smoke"){
+  runProcessorChecks(p);return 0;
+ }
  if(argc==3&&juce::String(argv[1])=="--pulse-gui"){
   blazar::UserPatches legacy(p,juce::File(argv[2]));require(legacy.load("ANOMALIES","Gravitational Stutter").wasOk(),"older user patch loads without file changes");require(std::abs(p.parameters().getRawParameterValue("pulseRate")->load()-2.f)<1e-5,"old discrete pulse rate mapped to continuous frequency");
   auto* editor=p.createEditorIfNeeded();auto* slider=dynamic_cast<juce::Slider*>(find(*editor,"param:pulseRate"));require(slider&&slider->getSliderStyle()==juce::Slider::RotaryHorizontalVerticalDrag,"rotary rate control");slider->setValue(1.137,juce::sendNotificationSync);require(std::abs(p.parameters().getRawParameterValue("pulseRate")->load()-1.137f)<1e-5,"rate knob continuous APVTS attachment");

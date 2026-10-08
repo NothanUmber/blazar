@@ -29,6 +29,7 @@
 !/Tests/FieldProbe.cpp
 !/Tests/BlazarPluginCheck.cpp
 !/Tests/BlazarEditorCheck.cpp
+!/Tests/BlazarProcessorCheck.cpp
 # Defence in depth for generated files anywhere.
 **/build*/
 **/__pycache__/
