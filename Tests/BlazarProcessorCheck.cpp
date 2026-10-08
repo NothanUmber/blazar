@@ -110,8 +110,74 @@ void checkStateValidation(Processor& processor) {
     std::cout << "PASS state validation, atomic rejection, endpoints, legacy rates and recall revisions\n";
 }
 
+void checkMidiChannels(Processor& processor) {
+    juce::AudioBuffer<float> audio(2, 256);
+    juce::MidiBuffer midi;
+    auto render = [&](int blocks) {
+        for (int i = 0; i < blocks; ++i) {
+            processor.processBlock(audio, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int sample = 0; sample < audio.getNumSamples(); ++sample)
+                    require(std::isfinite(audio.getSample(ch, sample)), "Non-finite processor audio");
+        }
+    };
+    auto start = [&] {
+        processor.setCurrentProgram(39);
+        processor.parameters().getParameter("volume")->setValueNotifyingHost(1.f);
+        processor.parameters().getParameter("release")->setValueNotifyingHost(0.f);
+        processor.parameters().getParameter("fieldRelease")->setValueNotifyingHost(0.f);
+        processor.reset();
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, juce::uint8(100)), 0);
+        midi.addEvent(juce::MidiMessage::noteOn(2, 67, juce::uint8(100)), 0);
+        render(100);
+        require(processor.voices() == 2, "Two-channel setup");
+    };
+
+    start();
+    midi.addEvent(juce::MidiMessage::allSoundOff(1), 0);
+    render(1);
+    require(processor.voices() == 1, "CC120 stopped another channel");
+    render(100);
+    require(audio.getMagnitude(0, 256) > 1e-7f, "Other channel became silent after CC120");
+    midi.addEvent(juce::MidiMessage::allSoundOff(2), 0);
+    render(1);
+    require(processor.voices() == 0 && audio.getMagnitude(0, 256) == 0.f, "CC120 did not silence the last channel and effects");
+
+    start();
+    midi.addEvent(juce::MidiMessage::controllerEvent(2, 64, 127), 0);
+    midi.addEvent(juce::MidiMessage::noteOff(2, 67), 0);
+    midi.addEvent(juce::MidiMessage::allNotesOff(1), 0);
+    render(1000);
+    require(processor.voices() == 1, "CC123 released another channel or its sustain");
+    require(audio.getMagnitude(0, 256) > 1e-7f, "Sustained other channel became silent after CC123");
+    midi.addEvent(juce::MidiMessage::controllerEvent(2, 64, 0), 0);
+    render(1000);
+    require(processor.voices() == 0, "Other channel did not release on pedal up");
+
+    // Stolen-note tails are also channel-specific. Silence the new channel's
+    // voices, leaving an old channel-2 tail, then silence that tail with CC120.
+    processor.reset();
+    for (int note = 60; note < 68; ++note)
+        midi.addEvent(juce::MidiMessage::noteOn(2, note, juce::uint8(100)), 0);
+    render(100);
+    midi.addEvent(juce::MidiMessage::allNotesOff(2), 0);
+    render(1);
+    for (int note = 40; note < 48; ++note) {
+        midi.addEvent(juce::MidiMessage::noteOn(1, note, juce::uint8(100)), 0);
+        render(1);
+    }
+    audio.setSize(2, 64); // Observe the tail before its 8 ms fade completes.
+    midi.addEvent(juce::MidiMessage::allSoundOff(1), 0);
+    render(1);
+    require(processor.voices() == 0 && audio.getMagnitude(0, 64) > 0.f, "CC120 stopped another channel's stolen-note tail");
+    midi.addEvent(juce::MidiMessage::allSoundOff(2), 0);
+    render(1);
+    require(processor.voices() == 0 && audio.getMagnitude(0, 64) == 0.f, "CC120 left stolen-note tails sounding");
+    std::cout << "PASS channel-scoped CC120/CC123, sustain, stolen-note tails and finite audio\n";
+}
 }
 
 void runProcessorChecks(Processor& processor) {
     checkStateValidation(processor);
+    checkMidiChannels(processor);
 }

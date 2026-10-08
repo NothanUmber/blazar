@@ -147,7 +147,7 @@ public:
 };
 class Engine {
  std::array<Voice,Limits::voices> voices;
- struct Retired {Mode l,r;double particle=0,fade=0;};std::array<Retired,Limits::voices> retired;
+ struct Retired {Mode l,r;double particle=0,fade=0;int channel=0;};std::array<Retired,Limits::voices> retired;
  std::array<Channel,16> channels{};
  Settings settings,targetSettings;bool fresh=true;int controlClock=0;Space space;Sine sine;Random rng;double sr=48000,bpm=120,motionPhase=0,beat=0,pulsePhase=0,drift=0,driftVelocity=0,evolutionRate=.12,target=0,next=0;
  double previousL=0,previousR=0,dcL=0,dcR=0,preSafety=0;uint32_t serial=1;size_t retirement=0;
@@ -163,7 +163,7 @@ public:
   ch=std::clamp(ch,0,15);Voice* v=nullptr;
   for(auto& q:voices)if(!q.active){v=&q;break;}
   if(!v){v=&*std::min_element(voices.begin(),voices.end(),[](const Voice&a,const Voice&b){return a.level()*(a.keyDown?2:1)<b.level()*(b.keyDown?2:1);});
-   auto& old=retired[retirement++%Limits::voices];old.fade=1;
+   auto& old=retired[retirement++%Limits::voices];old.fade=1;old.channel=v->channel;
    auto last=v->continuation(),previous=v->previous();
    auto seedTail=[&](Mode& tail,double x,double previous){
     tail.tune(v->frequency(),sr,.02);tail.x=x;
@@ -178,6 +178,20 @@ public:
  void bend(int ch,double x){channels[std::clamp(ch,0,15)].bend=clip(x,-1,1);}
  void wheel(int ch,double x){channels[std::clamp(ch,0,15)].wheel=clip(x);}
  void pressure(int ch,double x){channels[std::clamp(ch,0,15)].pressure=clip(x);}
+ void releaseChannel(int ch){
+  ch=std::clamp(ch,0,15);
+  for(auto& v:voices)if(v.channel==ch)v.release();
+  channels[ch].sustain=false;
+ }
+ void silenceChannel(int ch){
+  ch=std::clamp(ch,0,15);
+  for(auto& v:voices)if(v.channel==ch)v.active=false;
+  for(auto& r:retired)if(r.channel==ch)r.fade=0;
+  // Space and the DC filter are shared. Preserve other channels' voices and
+  // stolen-note tails; clear the remaining effects once all voices are silent.
+  const bool hasRetired=std::any_of(retired.begin(),retired.end(),[](const Retired& r){return r.fade>0;});
+  if(activeVoices()==0&&!hasRetired){space.clear();previousL=previousR=dcL=dcR=preSafety=0;}
+ }
  void releaseAll(){for(auto& v:voices)v.release();for(auto& c:channels)c.sustain=false;}
  Frame tick(){
   if((controlClock++&(sr>=64000?63:31))==0){
@@ -227,6 +241,5 @@ public:
  }
 };
 }
-
 
 
