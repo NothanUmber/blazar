@@ -132,6 +132,47 @@ If a newly installed Audio Unit is not discovered, close your audio hosts and ru
 
 A universal build contains both architectures, but CTest runs the native architecture of the current machine. Validate on Intel and on the oldest supported macOS before publishing a release; a successful build or `auval` run does not establish compatibility with every DAW.
 
+#### Local signing and notarization
+
+Two optional scripts prepare the AU and VST3 for distribution outside the Mac App Store. Run them locally after building and testing; CI does not invoke them. You need an Apple Developer Program membership, a **Developer ID Application** certificate with its private key in your local Keychain, and Xcode with `notarytool` and `stapler` available through `xcrun`. Both steps need internet access, including signing's secure timestamp request.
+
+An **Apple Development** certificate is for development and cannot be used for this distribution/notarization workflow. Passing its SHA-1 fingerprint still selects the same development certificate. Create a **Developer ID Application** certificate for your enrolled team in Xcode's account settings under **Manage Certificates → +**, or follow [Apple's Developer ID certificate instructions](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/). Creating a local Developer ID certificate requires the team's Account Holder role; a free Personal Team cannot create one. After creation, the certificate and its private key must be available in your local Keychain.
+
+Find your signing identity, then sign copies of both Release bundles:
+
+```sh
+security find-identity -v -p codesigning
+./sign-macos.sh "Developer ID Application: Your Name (TEAMID)"
+```
+
+You can pass the certificate's SHA-1 fingerprint instead of its name. The script replaces the copies' ad-hoc signatures, enables the hardened runtime, requests a secure timestamp and verifies every architecture against the Developer ID Application certificate requirement. It writes the signed bundles and license/source information to `build-macos/signed`, leaving the build products untouched. No additional entitlements are needed for these plugins.
+
+Store notarization credentials once using Apple's interactive prompts. For Apple ID authentication, use an **app-specific password**, not your normal account password; `notarytool` also supports App Store Connect API keys. Choose the team that owns the signing certificate. Credentials stay in Keychain; neither script requires passwords or private keys in the repository.
+
+```sh
+xcrun notarytool store-credentials blazar-notary
+./notarize-macos.sh blazar-notary
+```
+
+The second script uploads a ZIP of the signed directory to Apple, waits up to 30 minutes for acceptance, saves Apple's diagnostic log, staples and validates both bundles, then creates **`build-macos/notarized/Blazar-macOS.zip`**. Distribute this final ZIP; `submission.zip` is the input archive without stapled tickets. Review `notarization-log.json` for warnings even after acceptance. Publish the corresponding source revision alongside the binaries as described in [SOURCE.md](SOURCE.md).
+
+If waiting times out, processing continues at Apple. Resume the same submission without uploading again:
+
+```sh
+./notarize-macos.sh --resume blazar-notary build-macos/notarized
+```
+
+Resume also retries ticket attachment after a transient stapling failure. It uses the saved submission archive, so rebuilding the project cannot change the submitted payload. A rejected submission produces no final ZIP; inspect the log, correct the problem, sign again and submit into a new output directory.
+
+Both scripts support `--help`. Optional paths allow separate release directories:
+
+```sh
+./sign-macos.sh "Developer ID Application: Your Name (TEAMID)" build-macos /path/to/signed
+./notarize-macos.sh blazar-notary /path/to/signed /path/to/notarized
+```
+
+Output directories must not already exist for a new run; keep or move previous results, or choose new paths. A fresh build must be signed and notarized again. The scripts follow [Apple's command-line notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+
 ## Licensing
 
 BLAZAR is free and open source under **AGPL-3.0-only**, without warranty. See [LICENSE](LICENSE), [licensing details](LICENSE.md) and [NOTICE](NOTICE).

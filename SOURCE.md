@@ -4,6 +4,12 @@ This Windows VST3 is distributed under AGPLv3. The exact project source, embedde
 
 https://github.com/bjglover/blazar/tree/v1.0.0
 
+The historical tag above does not contain the macOS port. For macOS distributions,
+provide a link to the exact source commit or release tag used to build the plugins
+alongside the binary download. Follow the [macOS build instructions](README.md#macos)
+at that revision; the local signing scripts do not publish source or create a
+release tag. Modified builds need their own matching source link as well.
+
 JUCE is a pinned Git submodule at `dependencies/JUCE`: version **8.0.12**, commit **29396c22c93392d6738e021b83196283d6e4d850**. Its source and embedded dependencies, including the VST3 SDK, are available at:
 
 https://github.com/juce-framework/JUCE/tree/29396c22c93392d6738e021b83196283d6e4d850

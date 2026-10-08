@@ -14,6 +14,8 @@
 !/RELEASE_NOTES.md
 !/build.ps1
 !/build-macos.sh
+!/sign-macos.sh
+!/notarize-macos.sh
 !/.github/
 !/Source/
 !/Assets/
